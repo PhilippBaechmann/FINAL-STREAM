@@ -252,10 +252,9 @@ def create_industry_chart(df):
     try:
         industry_counts = df['NACE_Industry'].value_counts().head(10)
         
+        # Instead of using seaborn, use matplotlib directly to avoid warnings
         plt.figure(figsize=(10, 6))
-        # Updated to use newer Seaborn syntax to fix the FutureWarning
-        sns.barplot(x=industry_counts.values, y=industry_counts.index, 
-                   hue=None, palette="viridis", legend=False)
+        bars = plt.barh(y=industry_counts.index, width=industry_counts.values, color='teal')
         plt.title('Top 10 Industries with Consistent High-Growth Firms', fontsize=14)
         plt.xlabel('Number of Companies', fontsize=12)
         plt.tight_layout()
@@ -280,7 +279,8 @@ def create_revenue_chart(df):
         revenue_data = df[df['Estimated_Revenue_mn'] < df['Estimated_Revenue_mn'].quantile(0.95)]
         
         plt.figure(figsize=(10, 6))
-        sns.histplot(revenue_data['Estimated_Revenue_mn'], bins=15, kde=True, color='teal')
+        # Use matplotlib instead of seaborn
+        plt.hist(revenue_data['Estimated_Revenue_mn'], bins=15, color='teal', alpha=0.7)
         plt.title('Revenue Distribution of High-Growth Firms (EUR millions)', fontsize=14)
         plt.xlabel('Revenue (million EUR)', fontsize=12)
         plt.ylabel('Number of Companies', fontsize=12)
@@ -306,7 +306,8 @@ def create_growth_chart(df):
         growth_data = df[df['Growth 2023'] < df['Growth 2023'].quantile(0.95)]
         
         plt.figure(figsize=(10, 6))
-        sns.histplot(growth_data['Growth 2023'], bins=15, kde=True, color='purple')
+        # Use matplotlib instead of seaborn
+        plt.hist(growth_data['Growth 2023'], bins=15, color='purple', alpha=0.7)
         plt.title('Growth Rate Distribution of High-Growth Firms (2023)', fontsize=14)
         plt.xlabel('Growth Rate (%)', fontsize=12)
         plt.ylabel('Number of Companies', fontsize=12)
@@ -327,10 +328,9 @@ def create_location_chart(df):
     try:
         location_counts = df['City'].value_counts().head(10)
         
+        # Use matplotlib directly instead of seaborn to avoid warnings
         plt.figure(figsize=(10, 6))
-        # Updated to use newer Seaborn syntax to fix the FutureWarning
-        sns.barplot(x=location_counts.values, y=location_counts.index, 
-                   hue=None, palette="mako", legend=False)
+        bars = plt.barh(y=location_counts.index, width=location_counts.values, color='purple')
         plt.title('Top 10 Locations of High-Growth Firms in Ireland', fontsize=14)
         plt.xlabel('Number of Companies', fontsize=12)
         plt.tight_layout()
@@ -494,9 +494,15 @@ def render_dashboard_tab(df):
             bm_counts = df['Business_Model'].value_counts().head(10)
             
             fig, ax = plt.subplots(figsize=(10, 6))
-            bm_counts.plot(kind='pie', autopct='%1.1f%%', ax=ax, cmap='tab10')
+            # Use direct matplotlib instead of pandas/seaborn plotting
+            wedges, texts, autotexts = ax.pie(
+                bm_counts, 
+                labels=bm_counts.index,
+                autopct='%1.1f%%',
+                colors=plt.cm.tab10.colors
+            )
             plt.title('Top Business Models', fontsize=14)
-            plt.ylabel('')
+            plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
             plt.tight_layout()
             
             buf = BytesIO()
