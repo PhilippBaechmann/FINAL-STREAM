@@ -1,0 +1,11 @@
+streamlit
+pandas
+requests
+numpy
+python-docx
+langchain
+langchain-community
+langchain-groq
+faiss-cpu # Or faiss-gpu if you specifically need GPU support
+sentence-transformers
+openpyxl
