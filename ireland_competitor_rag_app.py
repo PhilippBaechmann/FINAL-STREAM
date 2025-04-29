@@ -87,6 +87,11 @@ class SimpleEmbeddings:
     def embed_query(self, text):
         """Embed a single query text."""
         return self.embed_documents([text])[0]
+        
+    # Add this method to make the class compatible with LangChain's expected interface
+    def embed_batch(self, texts):
+        """Alias for embed_documents to match LangChain's expected interface."""
+        return self.embed_documents(texts)
 
 # --- Helper Functions ---
 
@@ -180,7 +185,7 @@ def create_or_load_vector_store(_documents, index_path):
             try:
                 # Using allow_dangerous_deserialization for compatibility
                 vectorstore = FAISS.load_local(
-                    index_path, 
+                    folder_path=index_path, 
                     embeddings=embeddings,  # Explicitly name the parameter
                     allow_dangerous_deserialization=True
                 )
@@ -194,7 +199,7 @@ def create_or_load_vector_store(_documents, index_path):
             return None
             
         try:
-            # Create new vector store with explicit embeddings parameter
+            # Create new vector store with explicit parameter names
             vectorstore = FAISS.from_documents(
                 documents=_documents,
                 embedding=embeddings  # Use embedding parameter name
