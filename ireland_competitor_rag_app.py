@@ -253,7 +253,9 @@ def create_industry_chart(df):
         industry_counts = df['NACE_Industry'].value_counts().head(10)
         
         plt.figure(figsize=(10, 6))
-        sns.barplot(x=industry_counts.values, y=industry_counts.index, palette="viridis")
+        # Updated to use newer Seaborn syntax to fix the FutureWarning
+        sns.barplot(x=industry_counts.values, y=industry_counts.index, 
+                   hue=None, palette="viridis", legend=False)
         plt.title('Top 10 Industries with Consistent High-Growth Firms', fontsize=14)
         plt.xlabel('Number of Companies', fontsize=12)
         plt.tight_layout()
@@ -326,7 +328,9 @@ def create_location_chart(df):
         location_counts = df['City'].value_counts().head(10)
         
         plt.figure(figsize=(10, 6))
-        sns.barplot(x=location_counts.values, y=location_counts.index, palette="mako")
+        # Updated to use newer Seaborn syntax to fix the FutureWarning
+        sns.barplot(x=location_counts.values, y=location_counts.index, 
+                   hue=None, palette="mako", legend=False)
         plt.title('Top 10 Locations of High-Growth Firms in Ireland', fontsize=14)
         plt.xlabel('Number of Companies', fontsize=12)
         plt.tight_layout()
@@ -462,22 +466,26 @@ def render_dashboard_tab(df):
     with tab1:
         industry_chart = create_industry_chart(df)
         if industry_chart:
-            st.image(industry_chart, caption="Industry Distribution", use_column_width=True)
+            # Updated to use use_container_width instead of use_column_width
+            st.image(industry_chart, caption="Industry Distribution", use_container_width=True)
         
     with tab2:
         revenue_chart = create_revenue_chart(df)
         if revenue_chart:
-            st.image(revenue_chart, caption="Revenue Distribution", use_column_width=True)
+            # Updated to use use_container_width instead of use_column_width
+            st.image(revenue_chart, caption="Revenue Distribution", use_container_width=True)
     
     with tab3:
         growth_chart = create_growth_chart(df)
         if growth_chart:
-            st.image(growth_chart, caption="Growth Rate Distribution", use_column_width=True)
+            # Updated to use use_container_width instead of use_column_width
+            st.image(growth_chart, caption="Growth Rate Distribution", use_container_width=True)
             
     with tab4:
         location_chart = create_location_chart(df)
         if location_chart:
-            st.image(location_chart, caption="Geographic Distribution", use_column_width=True)
+            # Updated to use use_container_width instead of use_column_width
+            st.image(location_chart, caption="Geographic Distribution", use_container_width=True)
             
     # Business Model Distribution
     st.subheader("Business Model Distribution")
@@ -495,7 +503,8 @@ def render_dashboard_tab(df):
             plt.savefig(buf, format='png')
             buf.seek(0)
             img = Image.open(buf)
-            st.image(img, caption="Business Model Distribution", use_column_width=True)
+            # Updated to use use_container_width instead of use_column_width
+            st.image(img, caption="Business Model Distribution", use_container_width=True)
     except Exception as e:
         st.error(f"Could not create business model chart: {e}")
 
