@@ -14,6 +14,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
+from langchain.memory import ChatMessageHistory
 
 # --- Configuration ---
 DATA_FILE = 'ireland_cleaned_CHGF.xlsx'
@@ -176,7 +177,12 @@ def create_or_load_vector_store(_documents, index_path):
     
         if os.path.exists(index_path) and os.path.isdir(index_path):
             try:
-                vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+                # Using allow_dangerous_deserialization for compatibility
+                vectorstore = FAISS.load_local(
+                    index_path, 
+                    embeddings=embeddings,  # Explicitly name the parameter
+                    allow_dangerous_deserialization=True
+                )
                 st.info(f"Loaded existing FAISS index from {index_path}")
                 return vectorstore
             except Exception as e:
@@ -187,7 +193,11 @@ def create_or_load_vector_store(_documents, index_path):
             return None
             
         try:
-            vectorstore = FAISS.from_documents(_documents, embeddings)
+            # Create new vector store with explicit embeddings parameter
+            vectorstore = FAISS.from_documents(
+                documents=_documents,
+                embedding=embeddings  # Use embedding parameter name
+            )
             vectorstore.save_local(index_path)
             st.success(f"Created and saved FAISS index to {index_path}")
             return vectorstore
@@ -210,13 +220,22 @@ def setup_rag_chain(vectorstore, api_key):
         # Initialize LLM
         llm = ChatGroq(temperature=0.2, model_name=LLM_MODEL)
         
-        # Memory to store chat history
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True, output_key='answer')
+        # Updated memory initialization to address deprecation warning
+        # Using the newer approach recommended in the LangChain migration guide
+        from langchain.memory import ChatMessageHistory
+        
+        # Create a memory instance using the new pattern
+        memory = ConversationBufferMemory(
+            chat_memory=ChatMessageHistory(),
+            memory_key="chat_history",
+            return_messages=True,
+            output_key='answer'
+        )
         
         # Create the chain
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
-            retriever=vectorstore.as_retriever(search_kwargs={"k": 6}),  # Retrieve top 6 most similar documents
+            retriever=vectorstore.as_retriever(search_kwargs={"k": 6}),
             memory=memory,
             return_source_documents=True,
             verbose=False
