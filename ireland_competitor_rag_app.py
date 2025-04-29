@@ -34,8 +34,9 @@ METADATA_COLS = [
     'Growth 2023', 'aagr 2023', 'Public_or_Private', 'CEO', 'Description'
 ]
 
-# Model settings
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Model settings - changed to use simpler embedding approach for better compatibility
+USE_SIMPLE_EMBEDDINGS = True  # Set to True to use a simpler embedding method without external models
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Used only if USE_SIMPLE_EMBEDDINGS is False
 LLM_MODEL = "llama3-8b-8192"  # Default model
 FAISS_INDEX_PATH = "faiss_ireland_chgf_index"
 
@@ -146,27 +147,41 @@ def load_and_prepare_data(file_path):
 @st.cache_resource(show_spinner="Initializing vector store...")
 def create_or_load_vector_store(_documents, index_path):
     """Creates FAISS vector store from documents or loads if exists."""
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    try:
+        # Choose embedding method based on configuration
+        if USE_SIMPLE_EMBEDDINGS:
+            st.info("Using simple embeddings (no external model required)")
+            embeddings = SimpleEmbeddings()
+        else:
+            try:
+                st.info(f"Using HuggingFace embeddings: {EMBEDDING_MODEL}")
+                embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+            except Exception as e:
+                st.warning(f"Failed to load HuggingFace embeddings: {e}. Falling back to simple embeddings.")
+                embeddings = SimpleEmbeddings()
     
-    if os.path.exists(index_path) and os.path.isdir(index_path):
+        if os.path.exists(index_path) and os.path.isdir(index_path):
+            try:
+                vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+                st.info(f"Loaded existing FAISS index from {index_path}")
+                return vectorstore
+            except Exception as e:
+                st.warning(f"Failed to load existing index ({e}). Rebuilding index.")
+                
+        if not _documents:
+            st.error("No documents available to build vector store.")
+            return None
+            
         try:
-            vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-            st.info(f"Loaded existing FAISS index from {index_path}")
+            vectorstore = FAISS.from_documents(_documents, embeddings)
+            vectorstore.save_local(index_path)
+            st.success(f"Created and saved FAISS index to {index_path}")
             return vectorstore
         except Exception as e:
-            st.warning(f"Failed to load existing index ({e}). Rebuilding index.")
-            
-    if not _documents:
-        st.error("No documents available to build vector store.")
-        return None
-        
-    try:
-        vectorstore = FAISS.from_documents(_documents, embeddings)
-        vectorstore.save_local(index_path)
-        st.success(f"Created and saved FAISS index to {index_path}")
-        return vectorstore
+            st.error(f"Failed to create vector store: {e}")
+            return None
     except Exception as e:
-        st.error(f"Failed to create vector store: {e}")
+        st.error(f"Unexpected error in vector store creation: {e}")
         return None
 
 def setup_rag_chain(vectorstore, api_key, model_name=LLM_MODEL):
@@ -420,6 +435,10 @@ def render_dashboard_tab(df):
     """Renders the dashboard tab with visualizations."""
     st.header("📊 Market Landscape Dashboard")
     
+    if df is None or len(df) == 0:
+        st.error("Dashboard data is not available. Please check your data file.")
+        return
+    
     # Summary statistics
     st.subheader("Market Overview")
     col1, col2, col3, col4 = st.columns(4)
@@ -483,6 +502,11 @@ def render_dashboard_tab(df):
 def render_analysis_tab(vector_store, groq_api_key, serper_api_key, model_name):
     """Renders the competitor analysis tab."""
     st.header("🔍 Competitor Analysis")
+    
+    if vector_store is None:
+        st.error("Vector store initialization failed. Please check the Settings tab and try clearing the cache.")
+        st.info("This may be due to a connection issue with model servers or a problem with the data file.")
+        return
     
     # Company input section
     col1, col2 = st.columns([2, 1])
@@ -619,6 +643,11 @@ def render_analysis_tab(vector_store, groq_api_key, serper_api_key, model_name):
 def render_chat_tab(vector_store, groq_api_key, model_name):
     """Renders the chat interface tab."""
     st.header("💬 Ask Questions About the Market")
+    
+    if vector_store is None:
+        st.error("Vector store initialization failed. Please check the Settings tab and try clearing the cache.")
+        st.info("This may be due to a connection issue with model servers or a problem with the data file.")
+        return
     
     # Initialize the chain if not already done
     if "chat_rag_chain" not in st.session_state or st.session_state.get("current_model") != model_name:
