@@ -2,6 +2,9 @@ streamlit
 pandas
 requests
 numpy
+matplotlib
+seaborn
+Pillow
 python-docx
 langchain
 langchain-community
