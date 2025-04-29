@@ -14,7 +14,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain.memory import ChatMessageHistory
+# Updated import path for ChatMessageHistory to avoid deprecation warning
+from langchain_community.chat_message_histories import ChatMessageHistory
 
 # --- Configuration ---
 DATA_FILE = 'ireland_cleaned_CHGF.xlsx'
@@ -221,8 +222,7 @@ def setup_rag_chain(vectorstore, api_key):
         llm = ChatGroq(temperature=0.2, model_name=LLM_MODEL)
         
         # Updated memory initialization to address deprecation warning
-        # Using the newer approach recommended in the LangChain migration guide
-        from langchain.memory import ChatMessageHistory
+        # Using the newer approach with correct import
         
         # Create a memory instance using the new pattern
         memory = ConversationBufferMemory(
