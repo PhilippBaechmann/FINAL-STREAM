@@ -543,12 +543,19 @@ def main():
                             if 'Description' in row and pd.notna(row['Description']):
                                 desc = row['Description']
                                 if analysis_depth == "Brief" and len(desc) > 150:
-                                    desc = desc[:150] + "..."
+                                    with st.expander("Description"):
+                                        st.write(desc)
+                                    st.markdown(f"<div class='competitor-detail'><b>Description:</b> {desc[:150]}...</div>",
+                                               unsafe_allow_html=True)
                                 elif analysis_depth == "Standard" and len(desc) > 300:
-                                    desc = desc[:300] + "..."
-                                
-                                st.markdown(f"<div class='competitor-detail'><b>Description:</b> {desc}</div>", 
-                                           unsafe_allow_html=True)
+                                    with st.expander("Description (Click to expand)"):
+                                        st.write(desc)
+                                    st.markdown(f"<div class='competitor-detail'><b>Description:</b> {desc[:300]}...</div>",
+                                               unsafe_allow_html=True)
+                                else:
+                                    # For detailed view or short descriptions, show the full text
+                                    st.markdown(f"<div class='competitor-detail'><b>Description:</b> {desc}</div>",
+                                               unsafe_allow_html=True)
                             
                             # Show more/less button for detailed view 
                             if analysis_depth == "Detailed":
