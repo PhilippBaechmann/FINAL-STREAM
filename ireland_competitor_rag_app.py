@@ -110,16 +110,27 @@ def load_data(file_path='ireland_cleaned_CHGF.xlsx'):
             st.error("No high-growth firms found in the dataset.")
             return None
             
-        # Fill NAs for better processing
-        high_growth_firms['Description'] = high_growth_firms['Description'].fillna('No description available')
+        # Process text columns
+        text_columns = ['Description', 'Company Name', 'NACE_Industry', 'Business_Model', 'City']
+        for col in text_columns:
+            if col in high_growth_firms.columns:
+                high_growth_firms[col] = high_growth_firms[col].fillna('Not available').astype(str)
         
-        # Handle other columns
-        for col in high_growth_firms.columns:
-            if pd.api.types.is_numeric_dtype(high_growth_firms[col]):
-                high_growth_firms[col] = high_growth_firms[col].fillna(0)
+        # Process numeric columns - ensure they're actually numeric
+        numeric_columns = ['Estimated_Revenue_mn', 'Number of employees 2023', 'Founded Year']
+        for col in numeric_columns:
+            if col in high_growth_firms.columns:
+                high_growth_firms[col] = pd.to_numeric(high_growth_firms[col], errors='coerce').fillna(0)
+        
+        # Special handling for Growth column which might have % signs
+        if 'Growth 2023' in high_growth_firms.columns:
+            # If it's a string with % sign, convert properly
+            if high_growth_firms['Growth 2023'].dtype == object:
+                high_growth_firms['Growth 2023'] = high_growth_firms['Growth 2023'].astype(str).str.replace('%', '')
+                high_growth_firms['Growth 2023'] = pd.to_numeric(high_growth_firms['Growth 2023'], errors='coerce').fillna(0)
             else:
-                high_growth_firms[col] = high_growth_firms[col].fillna('Not available')
-                
+                high_growth_firms['Growth 2023'] = pd.to_numeric(high_growth_firms['Growth 2023'], errors='coerce').fillna(0)
+        
         # Create a summary column for better matching (combines key fields)
         high_growth_firms['company_summary'] = (
             high_growth_firms['Company Name'] + ' ' + 
@@ -219,14 +230,22 @@ def generate_docx_report(analysis_text, user_company_name, user_company_desc, co
             key_fields = [
                 'NACE_Industry', 'Business_Model', 'Estimated_Revenue_mn', 
                 'Number of employees 2023', 'Growth 2023', 'City', 
-                'Founded Year', 'aagr 2023', 'Public_or_Private'
+                'Founded Year'
             ]
             
             for key in key_fields:
                 if key in row and pd.notna(row[key]) and row[key] != 'Not available':
                     row_cells = table.add_row().cells
                     row_cells[0].text = key.replace('_', ' ')
-                    row_cells[1].text = str(row[key])
+                    # Format numeric values appropriately
+                    if key == 'Growth 2023' or key == 'aagr 2023':
+                        row_cells[1].text = f"{row[key]}%"
+                    elif key == 'Estimated_Revenue_mn':
+                        row_cells[1].text = f"€{row[key]} million"
+                    elif key == 'Founded Year':
+                        row_cells[1].text = str(int(row[key])) if row[key] > 0 else 'Not available'
+                    else:
+                        row_cells[1].text = str(row[key])
             
             # Add description
             if 'Description' in row and pd.notna(row['Description']):
@@ -280,20 +299,24 @@ def generate_docx_report(analysis_text, user_company_name, user_company_desc, co
 def create_radar_chart(competitors, key_metrics):
     """Create a radar chart comparing competitors on key metrics"""
     try:
-        # Select metrics that are numeric
-        valid_metrics = []
+        # Check if we have any numeric columns to work with
+        numeric_columns = []
         for metric in key_metrics:
-            if metric in competitors.columns and pd.api.types.is_numeric_dtype(competitors[metric]):
-                valid_metrics.append(metric)
+            if metric in competitors.columns:
+                # Ensure the column is numeric
+                if pd.api.types.is_numeric_dtype(competitors[metric]) or competitors[metric].dtype == float or competitors[metric].dtype == int:
+                    numeric_columns.append(metric)
         
-        if len(valid_metrics) < 3:
+        if len(numeric_columns) < 3:
             return None  # Need at least 3 metrics for a meaningful radar chart
             
         # Normalize the data for radar chart (0-1 scale)
-        radar_data = competitors[valid_metrics].copy()
-        for metric in valid_metrics:
-            if radar_data[metric].max() > radar_data[metric].min():
-                radar_data[metric] = (radar_data[metric] - radar_data[metric].min()) / (radar_data[metric].max() - radar_data[metric].min())
+        radar_data = competitors[numeric_columns].copy()
+        for metric in numeric_columns:
+            max_val = radar_data[metric].max()
+            min_val = radar_data[metric].min()
+            if max_val > min_val:
+                radar_data[metric] = (radar_data[metric] - min_val) / (max_val - min_val)
             else:
                 radar_data[metric] = 0.5  # If all values are the same
         
@@ -302,12 +325,12 @@ def create_radar_chart(competitors, key_metrics):
         ax = fig.add_subplot(111, polar=True)
         
         # Set the angles for each metric
-        angles = np.linspace(0, 2*np.pi, len(valid_metrics), endpoint=False).tolist()
+        angles = np.linspace(0, 2*np.pi, len(numeric_columns), endpoint=False).tolist()
         angles += angles[:1]  # Close the loop
         
         # Plot each competitor
         for i, (_, row) in enumerate(competitors.iterrows()):
-            values = radar_data.loc[row.name, valid_metrics].values.flatten().tolist()
+            values = radar_data.loc[row.name, numeric_columns].values.flatten().tolist()
             values += values[:1]  # Close the loop
             
             ax.plot(angles, values, linewidth=2, label=row['Company Name'][:15] + '...' if len(row['Company Name']) > 15 else row['Company Name'])
@@ -315,7 +338,7 @@ def create_radar_chart(competitors, key_metrics):
         
         # Set labels and styling
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels([m.replace('_', ' ') for m in valid_metrics])
+        ax.set_xticklabels([m.replace('_', ' ') for m in numeric_columns])
         ax.set_yticks([0.2, 0.4, 0.6, 0.8])
         ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8'])
         ax.set_title('Competitor Comparison', size=14)
@@ -443,16 +466,24 @@ def main():
                             st.markdown("</div>", unsafe_allow_html=True)
                             
                         with metric_cols[3]:
-                            avg_growth = competitors['Growth 2023'].mean() if 'Growth 2023' in competitors.columns else 0
-                            st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-                            st.markdown(f"<div class='metric-value'>{avg_growth:.1f}%</div>", unsafe_allow_html=True)
-                            st.markdown("<div class='metric-label'>Avg Growth (2023)</div>", unsafe_allow_html=True)
-                            st.markdown("</div>", unsafe_allow_html=True)
+                            # Ensure Growth 2023 is numeric before calculating mean
+                            try:
+                                growth_col = pd.to_numeric(competitors['Growth 2023'], errors='coerce')
+                                avg_growth = growth_col.mean()
+                                st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
+                                st.markdown(f"<div class='metric-value'>{avg_growth:.1f}%</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='metric-label'>Avg Growth (2023)</div>", unsafe_allow_html=True)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            except (TypeError, ValueError, KeyError):
+                                st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
+                                st.markdown("<div class='metric-value'>N/A</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='metric-label'>Avg Growth (2023)</div>", unsafe_allow_html=True)
+                                st.markdown("</div>", unsafe_allow_html=True)
                         
                         # Create industry distribution chart
                         industry_chart = create_industry_distribution(competitors)
                         if industry_chart:
-                            st.image(industry_chart, use_column_width=True)
+                            st.image(industry_chart, use_container_width=True)
                         
                         # Display each competitor in a card format
                         st.markdown("### Top Matching Companies")
@@ -488,13 +519,25 @@ def main():
                                     st.markdown(f"<div class='competitor-detail'><b>Est. Revenue:</b> €{row['Estimated_Revenue_mn']} million</div>", 
                                                unsafe_allow_html=True)
                                 
-                                if 'Growth 2023' in row and pd.notna(row['Growth 2023']) and row['Growth 2023'] != 'Not available':
-                                    st.markdown(f"<div class='competitor-detail'><b>Growth (2023):</b> {row['Growth 2023']}%</div>", 
-                                               unsafe_allow_html=True)
+                                # Safely display Growth 2023
+                                if 'Growth 2023' in row:
+                                    try:
+                                        growth_val = pd.to_numeric(row['Growth 2023'])
+                                        if pd.notna(growth_val):
+                                            st.markdown(f"<div class='competitor-detail'><b>Growth (2023):</b> {growth_val:.1f}%</div>", 
+                                                      unsafe_allow_html=True)
+                                    except:
+                                        pass  # Skip if we can't convert to numeric
                                 
-                                if 'Founded Year' in row and pd.notna(row['Founded Year']) and row['Founded Year'] != 'Not available' and row['Founded Year'] != 0:
-                                    st.markdown(f"<div class='competitor-detail'><b>Founded:</b> {int(row['Founded Year'])}</div>", 
-                                               unsafe_allow_html=True)
+                                # Safely display Founded Year
+                                if 'Founded Year' in row:
+                                    try:
+                                        founded = pd.to_numeric(row['Founded Year'])
+                                        if pd.notna(founded) and founded > 1900:  # Reasonable year check
+                                            st.markdown(f"<div class='competitor-detail'><b>Founded:</b> {int(founded)}</div>", 
+                                                      unsafe_allow_html=True)
+                                    except:
+                                        pass  # Skip if we can't convert to numeric
                             
                             # Description - show full in detailed mode, truncated otherwise
                             if 'Description' in row and pd.notna(row['Description']):
@@ -552,10 +595,19 @@ def main():
                 
                 # Select metrics that might be interesting for comparison
                 key_metrics = [
-                    'Estimated_Revenue_mn', 'Growth 2023', 'aagr 2023', 
-                    'Number of employees 2023', 'Founded Year'
+                    'Estimated_Revenue_mn', 'Number of employees 2023', 'Founded Year'
                 ]
                 
+                # Only include Growth 2023 if it's numeric
+                try:
+                    if 'Growth 2023' in st.session_state.competitors.columns:
+                        # Test if we can convert to numeric
+                        test = pd.to_numeric(st.session_state.competitors['Growth 2023'], errors='coerce')
+                        if not test.isna().all():
+                            key_metrics.append('Growth 2023')
+                except:
+                    pass  # Skip if conversion fails
+                    
                 radar_chart = create_radar_chart(st.session_state.competitors, key_metrics)
                 if radar_chart:
                     st.image(radar_chart, use_container_width=True)
@@ -581,12 +633,25 @@ def main():
                 # Display a simple data table
                 st.subheader("Competitor Data Table")
                 
-                # Select relevant columns
-                display_cols = [
-                    'Company Name', 'NACE_Industry', 'Business_Model', 
-                    'Estimated_Revenue_mn', 'Growth 2023', 'City'
-                ]
+                # Select relevant columns that are safe to display
+                safe_cols = ['Company Name', 'NACE_Industry', 'Business_Model', 'City']
                 
+                # Only include numeric columns if they're really numeric
+                numeric_cols = []
+                for col in ['Estimated_Revenue_mn', 'Number of employees 2023', 'Founded Year']:
+                    if col in st.session_state.competitors.columns:
+                        try:
+                            # Check if column can be converted to numeric
+                            st.session_state.competitors[col] = pd.to_numeric(st.session_state.competitors[col], errors='coerce')
+                            if not st.session_state.competitors[col].isna().all():
+                                numeric_cols.append(col)
+                        except:
+                            pass  # Skip problematic columns
+                
+                # Combine safe text columns with safe numeric columns
+                display_cols = safe_cols + numeric_cols
+                
+                # Only include columns that actually exist
                 available_cols = [col for col in display_cols if col in st.session_state.competitors.columns]
                 
                 st.dataframe(
@@ -605,10 +670,15 @@ def main():
                         st.write(f"The most common business model among competitors is **{most_common_bm}** " +
                                 f"with {bm_counts[0]} out of {len(st.session_state.competitors)} companies.")
                 
-                # Average growth rate
+                # Average growth rate - with safe conversion
                 if 'Growth 2023' in st.session_state.competitors.columns:
-                    avg_growth = st.session_state.competitors['Growth 2023'].mean()
-                    st.write(f"The average growth rate among these competitors is **{avg_growth:.1f}%**.")
+                    try:
+                        growth_col = pd.to_numeric(st.session_state.competitors['Growth 2023'], errors='coerce')
+                        if not growth_col.isna().all():
+                            avg_growth = growth_col.mean()
+                            st.write(f"The average growth rate among these competitors is **{avg_growth:.1f}%**.")
+                    except:
+                        pass  # Skip if calculation fails
                 
                 # Geographic distribution
                 if 'City' in st.session_state.competitors.columns:
